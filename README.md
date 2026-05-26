@@ -79,15 +79,18 @@ GYRUS DATA SOLUTIONS/
             └── {NT}/           ← Ej: 2T
                 └── {MES}/      ← Ej: MAYO
                     └── RECIBIDAS/
-                        └── Servicios Informáticos/
-                            ├── 2.LENOVO/
-                            ├── 3.MICROSOFT/
-                            ├── 4.BASECAMP/
-                            ├── 5.IONOS/
-                            ├── 5.VERCEL/
-                            ├── 6.AWS/
-                            ├── 7.GITHUB/
-                            └── 8.SUPABASE/
+                        ├── Servicios Informáticos/
+                        │   ├── 2.LENOVO/
+                        │   ├── 3.MICROSOFT/
+                        │   ├── 4.BASECAMP/
+                        │   ├── 5.IONOS/
+                        │   ├── 5.VERCEL/
+                        │   ├── 6.AWS/
+                        │   ├── 7.GITHUB/
+                        │   └── 8.SUPABASE/
+                        └── Alquiler espacios/
+                            ├── COWORK MADRID/
+                            └── PARKING MADRID/
 ```
 
 Las carpetas se crean automáticamente si no existen.
@@ -96,20 +99,25 @@ Las carpetas se crean automáticamente si no existen.
 
 ## 6. Lógica de fechas
 
-| Proveedor  | Llega        | Contabiliza en |
-|------------|--------------|----------------|
-| AWS        | Días 1–3     | Mes anterior   |
-| Basecamp   | Días 21–23   | Mes actual     |
-| Vercel     | Días 17–19   | Mes actual     |
-| Ionos      | Cualquier día| Mes actual     |
-| Supabase   | Días 26–28   | Mes actual     |
-| Microsoft  | Cualquier día| Mes actual     |
-| Github     | Cualquier día| Mes actual     |
-| Lenovo     | Cualquier día| Mes actual     |
+| Proveedor  | Llega               | Contabiliza en |
+|------------|---------------------|----------------|
+| AWS        | Cualquier día       | Mes actual     |
+| Basecamp   | Días 21–23          | Mes actual     |
+| Vercel     | Días 17–19          | Mes actual     |
+| Ionos      | Cualquier día       | Mes actual     |
+| Supabase   | Días 26–28          | Mes actual     |
+| Microsoft  | Cualquier día       | Mes actual     |
+| Github     | Cualquier día       | Mes actual     |
+| Lenovo     | Cualquier día       | Mes actual     |
+| Jerónimo   | Cualquier día       | Mes actual     |
+| Alse       | Cualquier día       | Mes anterior   |
 
-**AWS** es especial: sus facturas llegan los primeros días del mes siguiente
-al que corresponden. Si procesas Mayo (`python invoice_uploader.py 5`),
-el script buscará el correo de AWS que llega entre el 1 y el 3 de Junio.
+**Alse** es especial: su factura llega durante el mes en curso pero contabiliza
+en el mes **anterior**. Si procesas Mayo (`python invoice_uploader.py 5`),
+el script buscará el correo de Alse que llegó durante Abril.
+
+**Vercel** filtra adjuntos: solo se suben archivos con prefijo `Invoice-`
+(se descartan los recibos `Receipt-*`).
 
 ---
 
