@@ -117,7 +117,7 @@ PROVEEDORES = [
         "reply_to": False,
         "tipo": "Servicios Informáticos",
         "carpeta": "4.BASECAMP",
-        "arrival_days": (21, 23),    # llega días 21-23 → mes ACTUAL
+        "arrival_days": None,
         "arrival_month": "current",
     },
     {
@@ -126,7 +126,7 @@ PROVEEDORES = [
         "reply_to": False,
         "tipo": "Servicios Informáticos",
         "carpeta": "5.VERCEL",
-        "arrival_days": (17, 19),    # llega días 17-19 → mes ACTUAL
+        "arrival_days": None,
         "arrival_month": "current",
         "attachment_filter": "Invoice-",  # ignorar Receipt-*, solo Invoice-*
     },
@@ -145,7 +145,7 @@ PROVEEDORES = [
         "reply_to": True,
         "tipo": "Servicios Informáticos",
         "carpeta": "8.SUPABASE",
-        "arrival_days": (26, 28),    # llega días 26-28 → mes ACTUAL
+        "arrival_days": None,    # llega días 26-28 → mes ACTUAL
         "arrival_month": "current",
     },
     {
@@ -462,6 +462,7 @@ def upload_file(drive_service, folder_id: str, filename: str, data: bytes) -> st
 
 def send_summary_email(gmail_service, uploaded: list, skipped: list, errors: list,
                         target_month: int, target_year: int, dry_run: bool):
+    from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
     mes_str = MESES_ES[target_month]
@@ -469,49 +470,134 @@ def send_summary_email(gmail_service, uploaded: list, skipped: list, errors: lis
     if dry_run:
         subject = "[DRY RUN] " + subject
 
-    lines = [
-        f"Resumen de subida de facturas — {mes_str} {target_year}",
-        "=" * 60,
-        "",
-    ]
+    counts: dict = {p["name"]: {"subidas": 0, "omitidas": 0, "errores": 0} for p in PROVEEDORES}
+    for item in uploaded:
+        counts[item["proveedor"]]["subidas"] += 1
+    for item in skipped:
+        counts[item["proveedor"]]["omitidas"] += 1
+    for item in errors:
+        counts[item["proveedor"]]["errores"] += 1
 
-    if uploaded:
-        lines.append(f"✅ SUBIDAS CORRECTAMENTE ({len(uploaded)})")
-        lines.append("-" * 40)
-        for item in uploaded:
-            lines.append(f"  • {item['proveedor']}: {item['filename']}")
-            lines.append(f"    → {item['drive_path']}")
-        lines.append("")
+    total_up = sum(c["subidas"] for c in counts.values())
+    total_sk = sum(c["omitidas"] for c in counts.values())
+    total_er = sum(c["errores"] for c in counts.values())
 
-    if skipped:
-        lines.append(f"⏭️  OMITIDAS — ya existían en Drive ({len(skipped)})")
-        lines.append("-" * 40)
-        for item in skipped:
-            lines.append(f"  • {item['proveedor']}: {item['filename']}")
-            lines.append(f"    → {item['drive_path']}")
-        lines.append("")
+    # --- HTML ---
+    def td(val, bold=False, color=None):
+        style = "padding:6px 14px;text-align:center;"
+        if color:
+            style += f"color:{color};font-weight:600;"
+        if bold:
+            style += "font-weight:700;"
+        return f'<td style="{style}">{val}</td>'
 
-    if errors:
-        lines.append(f"❌ ERRORES ({len(errors)})")
-        lines.append("-" * 40)
-        for item in errors:
-            lines.append(f"  • {item['proveedor']}: {item.get('filename', 'N/A')}")
-            lines.append(f"    Error: {item['error']}")
-        lines.append("")
+    def td_name(val, bold=False):
+        style = "padding:6px 14px;text-align:left;"
+        if bold:
+            style += "font-weight:700;"
+        return f'<td style="{style}">{val}</td>'
 
-    if not uploaded and not skipped and not errors:
-        lines.append("No se encontraron facturas para este mes.")
+    summary_rows = ""
+    for prov in sorted(counts.keys()):
+        c = counts[prov]
+        up_color = "#16a34a" if c["subidas"] else "#6b7280"
+        sk_color = "#d97706" if c["omitidas"] else "#6b7280"
+        er_color = "#dc2626" if c["errores"] else "#6b7280"
+        summary_rows += (
+            f"<tr>"
+            f"{td_name(prov)}"
+            f"{td(c['subidas'], color=up_color)}"
+            f"{td(c['omitidas'], color=sk_color)}"
+            f"{td(c['errores'], color=er_color)}"
+            f"</tr>"
+        )
 
-    if dry_run:
-        lines.append("")
-        lines.append("⚠️  Modo DRY RUN — no se ha subido nada realmente.")
+    up_color_total = "#16a34a" if total_up else "#6b7280"
+    sk_color_total = "#d97706" if total_sk else "#6b7280"
+    er_color_total = "#dc2626" if total_er else "#6b7280"
+    total_row = (
+        f'<tr style="border-top:2px solid #e5e7eb;background:#f9fafb;">'
+        f'{td_name("TOTAL", bold=True)}'
+        f'{td(total_up, color=up_color_total)}'
+        f'{td(total_sk, color=sk_color_total)}'
+        f'{td(total_er, color=er_color_total)}'
+        f"</tr>"
+    )
 
-    body = "\n".join(lines)
+    th_style = "padding:8px 14px;background:#1e293b;color:#f8fafc;font-weight:600;text-align:center;"
+    th_name_style = "padding:8px 14px;background:#1e293b;color:#f8fafc;font-weight:600;text-align:left;"
 
-    msg = MIMEText(body, "plain", "utf-8")
+    summary_table = f"""
+    <table style="border-collapse:collapse;font-family:sans-serif;font-size:14px;margin-bottom:24px;min-width:400px;">
+      <thead>
+        <tr>
+          <th style="{th_name_style}">Proveedor</th>
+          <th style="{th_style}">✅ Subidas</th>
+          <th style="{th_style}">⏭ Omitidas</th>
+          <th style="{th_style}">❌ Errores</th>
+        </tr>
+      </thead>
+      <tbody>
+        {summary_rows}
+        {total_row}
+      </tbody>
+    </table>
+    """ if counts else "<p style='color:#6b7280;'>No se encontraron facturas para este mes.</p>"
+
+    def section(title, items, color, key_fn):
+        if not items:
+            return ""
+        rows = "".join(
+            f"<tr><td style='padding:4px 10px;font-weight:600;'>{i['proveedor']}</td>"
+            f"<td style='padding:4px 10px;'>{i.get('filename','N/A')}</td>"
+            f"<td style='padding:4px 10px;color:#6b7280;font-size:12px;'>{key_fn(i)}</td></tr>"
+            for i in items
+        )
+        return f"""
+        <h3 style="color:{color};margin-top:24px;">{title} ({len(items)})</h3>
+        <table style="border-collapse:collapse;font-family:sans-serif;font-size:13px;width:100%;">
+          <thead><tr>
+            <th style="text-align:left;padding:4px 10px;border-bottom:1px solid #e5e7eb;">Proveedor</th>
+            <th style="text-align:left;padding:4px 10px;border-bottom:1px solid #e5e7eb;">Archivo</th>
+            <th style="text-align:left;padding:4px 10px;border-bottom:1px solid #e5e7eb;">Ruta / Error</th>
+          </tr></thead>
+          <tbody>{rows}</tbody>
+        </table>"""
+
+    detail_html = (
+        section("✅ Subidas correctamente", uploaded, "#16a34a", lambda i: i["drive_path"]) +
+        section("⏭ Omitidas — ya existían en Drive", skipped, "#d97706", lambda i: i["drive_path"]) +
+        section("❌ Errores", errors, "#dc2626", lambda i: i.get("error", ""))
+    )
+
+    dry_run_banner = """
+    <div style="margin-top:24px;padding:12px 16px;background:#fef9c3;border-left:4px solid #ca8a04;
+                font-family:sans-serif;font-size:13px;color:#713f12;">
+      ⚠️ <strong>Modo DRY RUN</strong> — no se ha subido nada realmente.
+    </div>""" if dry_run else ""
+
+    no_invoices = "" if (uploaded or skipped or errors) else \
+        "<p style='font-family:sans-serif;color:#6b7280;'>No se encontraron facturas para este mes.</p>"
+
+    html = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;background:#f1f5f9;">
+<div style="max-width:700px;margin:0 auto;background:#ffffff;border-radius:8px;
+            padding:32px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+  <h2 style="margin-top:0;font-family:sans-serif;color:#1e293b;">
+    Facturas — {mes_str} {target_year}
+  </h2>
+  {summary_table}
+  {detail_html}
+  {no_invoices}
+  {dry_run_banner}
+</div>
+</body></html>"""
+
+    msg = MIMEMultipart("alternative")
     msg["To"] = MY_EMAIL
     msg["From"] = MY_EMAIL
     msg["Subject"] = subject
+    msg.attach(MIMEText(html, "html", "utf-8"))
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
     gmail_service.users().messages().send(
