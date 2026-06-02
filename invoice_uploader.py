@@ -147,6 +147,7 @@ PROVEEDORES = [
         "carpeta": "8.SUPABASE",
         "arrival_days": None,    # llega días 26-28 → mes ACTUAL
         "arrival_month": "current",
+        "attachment_filter": "Invoice-",  # ignorar Receipt-*, solo Invoice-*
     },
     {
         "name": "Microsoft",
